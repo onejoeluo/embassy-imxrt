@@ -508,28 +508,26 @@ impl CaptureTimer<Async> {
     ) -> u32 {
         let reg = self.info.regs;
 
+        self.event_clock_counts = 0;
         self.start(event_input, event_pin, edge);
 
         // Implementation of waiting for the interrupt
         poll_fn(|cx| {
-            WAKERS[self.id].register(cx.waker());
+            let curr_event_clock_count = reg.cr(self.info.channel).read().bits();
 
-            if self.info.input_event_captured() {
-                let curr_event_clock_count = reg.cr(self.info.channel).read().bits();
-                if self.event_clock_counts == 0 {
-                    self.event_clock_counts = curr_event_clock_count;
-                    return Poll::Pending;
-                }
+            if curr_event_clock_count != 0 && self.event_clock_counts != 0 {
                 let prev_event_clock_count = self.event_clock_counts;
                 if curr_event_clock_count < prev_event_clock_count {
                     self.event_clock_counts = (u32::MAX - prev_event_clock_count) + curr_event_clock_count + 1_u32;
                 } else {
                     self.event_clock_counts = curr_event_clock_count - prev_event_clock_count;
                 }
-                Poll::Ready(self.get_event_capture_time_us())
-            } else {
-                Poll::Pending
+                self.info.cap_timer_interrupt_disable();
+                return Poll::Ready(self.get_event_capture_time_us());
             }
+            self.event_clock_counts = curr_event_clock_count;
+            WAKERS[self.id].register(cx.waker());
+            Poll::Pending
         })
         .await
     }
@@ -766,22 +764,18 @@ impl<T: Instance> interrupt::typelevel::Handler<T::Interrupt> for CtimerInterrup
             WAKERS[module * CHANNEL_PER_MODULE + 3].wake();
         }
         if ir.cr0int().bit_is_set() {
-            reg.ccr().modify(|_, w| w.cap0i().clear_bit());
             reg.ir().modify(|_, w| w.cr0int().set_bit());
             WAKERS[module * CHANNEL_PER_MODULE + COUNT_CHANNEL].wake();
         }
         if ir.cr1int().bit_is_set() {
-            reg.ccr().modify(|_, w| w.cap1i().clear_bit());
             reg.ir().modify(|_, w| w.cr1int().set_bit());
             WAKERS[module * CHANNEL_PER_MODULE + COUNT_CHANNEL + 1].wake();
         }
         if ir.cr2int().bit_is_set() {
-            reg.ccr().modify(|_, w| w.cap2i().clear_bit());
             reg.ir().modify(|_, w| w.cr2int().set_bit());
             WAKERS[module * CHANNEL_PER_MODULE + COUNT_CHANNEL + 2].wake();
         }
         if ir.cr3int().bit_is_set() {
-            reg.ccr().modify(|_, w| w.cap3i().clear_bit());
             reg.ir().modify(|_, w| w.cr3int().set_bit());
             WAKERS[module * CHANNEL_PER_MODULE + COUNT_CHANNEL + 3].wake();
         }
