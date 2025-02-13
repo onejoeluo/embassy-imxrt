@@ -433,12 +433,11 @@ impl From<TriggerInput> for crate::pac::inputmux::ct32bit_cap::ct32bit_cap_sel::
 impl<M: Mode> CaptureTimer<M> {
     /// Returns the captured clock count
     /// Captured clock = (Capture value - previous counter value)
-    fn get_event_capture_time_us(&self) -> u32 {
-        let time_float = (self.event_clock_counts as f32 / self.clk_freq as f32) * 1000000.0;
-        let time_int = time_float as u32 as f32;
-        let interger_part = time_int as u32;
-        let decimal_part = ((time_float - time_int) * 1000000.0) as u32;
-        interger_part + decimal_part
+    fn get_event_capture_time_us(&mut self) -> u32 {
+        let mut tmp = self.event_clock_counts * 1_000_000;
+        tmp /= self.clk_freq;
+        self.event_clock_counts = 0;
+        tmp
     }
 
     fn reset_and_enable(&self) {
@@ -511,14 +510,16 @@ impl CaptureTimer<Async> {
 
         self.start(event_input, event_pin, edge);
 
-        self.event_clock_counts = reg.tc().read().bits(); // Take the initial count
-
         // Implementation of waiting for the interrupt
         poll_fn(|cx| {
             WAKERS[self.id].register(cx.waker());
 
             if self.info.input_event_captured() {
                 let curr_event_clock_count = reg.cr(self.info.channel).read().bits();
+                if self.event_clock_counts == 0 {
+                    self.event_clock_counts = curr_event_clock_count;
+                    return Poll::Pending;
+                }
                 let prev_event_clock_count = self.event_clock_counts;
                 if curr_event_clock_count < prev_event_clock_count {
                     self.event_clock_counts = (u32::MAX - prev_event_clock_count) + curr_event_clock_count + 1_u32;
@@ -812,3 +813,5 @@ macro_rules! impl_pin {
 // Capture event pins
 // We can add all the GPIO pins here which can be used as capture event inputs
 impl_pin!(PIO1_7, F4, Enabled);
+impl_pin!(PIO0_4, F4, Enabled);
+impl_pin!(PIO0_5, F4, Enabled);
