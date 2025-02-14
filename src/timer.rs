@@ -500,16 +500,11 @@ impl CaptureTimer<Async> {
     /// Waits asynchronously for the capture timer to record an event timestamp.
     /// This API can capture time till the counter has not crossed the original position after rollover
     /// Once the counter crosses the original position, the captured time is not accurate
-    pub async fn capture_event_time_us(
-        &mut self,
-        event_input: TriggerInput,
-        event_pin: impl CaptureEvent,
-        edge: CaptureChEdge,
-    ) -> u32 {
+    pub async fn capture_event_time_us(&mut self, event_pin: impl CaptureEvent, edge: CaptureChEdge) -> u32 {
         let reg = self.info.regs;
 
         self.event_clock_counts = 0;
-        self.start(event_input, event_pin, edge);
+        self.start(event_pin.get_trigger_input(), event_pin, edge);
 
         // Implementation of waiting for the interrupt
         poll_fn(|cx| {
@@ -549,14 +544,9 @@ impl CaptureTimer<Blocking> {
     /// Waits synchronously for the capture timer
     /// This API can capture time till the counter has not crossed the original position after rollover
     /// Once the counter crosses the original position, the captured time is not accurate
-    pub fn capture_event_time_us(
-        &mut self,
-        event_input: TriggerInput,
-        event_pin: impl CaptureEvent,
-        edge: CaptureChEdge,
-    ) -> u32 {
+    pub fn capture_event_time_us(&mut self, event_pin: impl CaptureEvent, edge: CaptureChEdge) -> u32 {
         let reg = self.info.regs;
-        self.start(event_input, event_pin, edge);
+        self.start(event_pin.get_trigger_input(), event_pin, edge);
 
         self.event_clock_counts = reg.tc().read().bits(); // Take the initial count
 
@@ -786,9 +776,11 @@ impl<T: Instance> interrupt::typelevel::Handler<T::Interrupt> for CtimerInterrup
 pub trait CaptureEvent: Pin + crate::Peripheral {
     /// Configures the pin as a capture event input.
     fn configure_for_event_capture(&self);
+    /// Return the corresponding TriggerInput number.
+    fn get_trigger_input(&self) -> TriggerInput;
 }
 macro_rules! impl_pin {
-    ($piom_n:ident, $fn:ident, $invert:ident) => {
+    ($piom_n:ident, $fn:ident, $invert:ident, $trig:ident) => {
         impl CaptureEvent for crate::peripherals::$piom_n {
             fn configure_for_event_capture(&self) {
                 self.set_function(crate::iopctl::Function::$fn);
@@ -800,12 +792,33 @@ macro_rules! impl_pin {
                 self.enable_input_buffer();
                 self.set_input_inverter(Inverter::$invert);
             }
+
+            fn get_trigger_input(&self) -> TriggerInput {
+                TriggerInput::$trig
+            }
         }
     };
 }
 
 // Capture event pins
 // We can add all the GPIO pins here which can be used as capture event inputs
-impl_pin!(PIO1_7, F4, Enabled);
-impl_pin!(PIO0_4, F4, Enabled);
-impl_pin!(PIO0_5, F4, Enabled);
+impl_pin!(PIO0_4, F4, Enabled, TrigIn0);
+impl_pin!(PIO0_5, F4, Enabled, TrigIn1);
+impl_pin!(PIO0_11, F4, Enabled, TrigIn2);
+impl_pin!(PIO0_12, F4, Enabled, TrigIn3);
+impl_pin!(PIO0_18, F4, Enabled, TrigIn4);
+impl_pin!(PIO0_19, F4, Enabled, TrigIn5);
+impl_pin!(PIO0_20, F5, Enabled, TrigIn11);
+impl_pin!(PIO0_25, F4, Enabled, TrigIn6);
+impl_pin!(PIO0_26, F4, Enabled, TrigIn7);
+impl_pin!(PIO1_0, F4, Enabled, TrigIn8);
+impl_pin!(PIO1_7, F4, Enabled, TrigIn9);
+impl_pin!(PIO1_8, F3, Enabled, TrigIn12);
+impl_pin!(PIO1_10, F4, Enabled, TrigIn10);
+impl_pin!(PIO1_23, F4, Enabled, TrigIn8);
+impl_pin!(PIO1_29, F4, Enabled, TrigIn13);
+impl_pin!(PIO2_14, F4, Enabled, TrigIn1);
+impl_pin!(PIO2_21, F4, Enabled, TrigIn14);
+impl_pin!(PIO2_31, F4, Enabled, TrigIn15);
+impl_pin!(PIO3_12, F4, Enabled, TrigIn0);
+impl_pin!(PIO3_13, F4, Enabled, TrigIn1);

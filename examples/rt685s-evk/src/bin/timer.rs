@@ -4,7 +4,7 @@
 use defmt::info;
 use embassy_executor::Spawner;
 use embassy_imxrt::clocks::ClockConfig;
-use embassy_imxrt::timer::{CaptureChEdge, CaptureTimer, CountingTimer, TriggerInput};
+use embassy_imxrt::timer::{CaptureChEdge, CaptureTimer, CountingTimer};
 use embassy_imxrt::{bind_interrupts, peripherals, timer};
 use embassy_time::Timer as Tmr;
 use {defmt_rtt as _, panic_probe as _};
@@ -52,7 +52,7 @@ async fn main(_spawner: Spawner) {
         // pass the input mux number, Input pin and Input pin edge user is interested in
         // Input mux details can be found in NXP user manual section 8.6.8 and Pin Function Table in section 7.5.3
         let event_time_ms = cap_async_tmr
-            .capture_event_time_us(TriggerInput::TrigIn9, p.PIO1_7, CaptureChEdge::Falling)
+            .capture_event_time_us(p.PIO1_7, CaptureChEdge::Falling)
             .await;
 
         info!("Capture timer expired in = {} ms", event_time_ms);
